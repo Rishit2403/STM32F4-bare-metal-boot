@@ -1,0 +1,57 @@
+rishit@rishit-Inspiron-14-5430:~/Downloads/STM32F4 bare metal boot$ gdb-multiarch firmware.elf
+GNU gdb (Ubuntu 15.0.50.20240403-0ubuntu1) 15.0.50.20240403-git
+Copyright (C) 2024 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+Type "show copying" and "show warranty" for details.
+This GDB was configured as "x86_64-linux-gnu".
+Type "show configuration" for configuration details.
+For bug reporting instructions, please see:
+<https://www.gnu.org/software/gdb/bugs/>.
+Find the GDB manual and other documentation resources online at:
+    <http://www.gnu.org/software/gdb/documentation/>.
+
+For help, type "help".
+Type "apropos word" to search for commands related to "word"...
+Reading symbols from firmware.elf...
+(gdb) target remote :3333
+Remote debugging using :3333
+Reset_Handler () at startup/startup_stm32f4.s:39
+39	    ldr r0, =_sidata
+(gdb) monitor system_reset
+(gdb) monitor stop
+(gdb) load
+Loading section .isr_vector, size 0x40 lma 0x8000000
+Loading section .text, size 0x18e lma 0x8000040
+Loading section .data, size 0x4 lma 0x80001ce
+Start address 0x08000040, load size 466
+Transfer rate: 3728 bits in <1 sec, 155 bytes/write.
+
+(gdb) break Reset_Handler
+Breakpoint 1 at 0x8000140: file startup/startup_stm32f4.s, line 39.
+(gdb) continue
+Continuing.
+onRemote connection closed
+(gdb) info registers
+The program has no registers now.
+(gdb) monitor info registers
+"monitor" command not supported by this target.
+(gdb) p/x $sp
+No registers.
+(gdb) p/x $pc
+No registers.
+(gdb) p initialised
+No symbol "initialised" in current context.
+(gdb) p initialized
+$1 = 123
+(gdb) p uninitialized
+$2 = 0
+(gdb) stepi
+The program is not being run.
+(gdb) stepi
+The program is not being run.
+(gdb) detach 
+The program is not being run.
+(gdb) quit
+
