@@ -19,14 +19,17 @@ SECTIONS
         KEEP(*(.isr_vector))
     } > FLASH
 
-    /* Code and read-only data sections
-       Placed in Flash immediately after vector table
-       Contains executable instructions and constant strings */
     .text :
-    {
-        *(.text*)
-        *(.rodata*)
-    } > FLASH
+   {
+      *(.text*)
+   } > FLASH
+
+   /* Read-only data section: string literals and constants
+      Placed in Flash after code, separate from executable .text */
+   .rodata :
+   {
+      *(.rodata*)
+   } > FLASH
 
     /* Symbol for .data load address (in Flash)
        Used by Reset_Handler to copy initialized data */

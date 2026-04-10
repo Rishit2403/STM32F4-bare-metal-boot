@@ -24,7 +24,7 @@
 
 g_pfnVectors:
     .word _estack
-    .word Reset_Handler + 1
+    .word Reset_Handler 
     .word NMI_Handler
     .word HardFault_Handler
     .word MemManage_Handler
@@ -68,7 +68,7 @@ data_copy:
     ldr r3, [r0], #4
     str r3, [r1], #4
     cmp r1, r2
-    blt data_copy
+    blo data_copy
 
 /* Initialize .bss section: zero all uninitialized variables
    r1: start address (_sbss)
@@ -86,7 +86,7 @@ bss_init:
 bss_zero:
     str r3, [r1], #4
     cmp r1, r2
-    blt bss_zero
+    blo bss_zero
 
 /* Call main() function after all initialization complete */
 main_call:
@@ -96,27 +96,36 @@ main_call:
 .section .text.default_handler,"ax",%progbits
 .thumb_func
 
-/* Default weak exception handlers: catch unimplemented exceptions
-   Handlers return to caller (bx lr) to prevent system lockup
-   User code can override these by defining strong symbols */
+/* Default handler: infinite loop catches unhandled exceptions
+   Using b . instead of bx lr so debugger can identify which fired */
+Default_Handler:
+    b .
 
+/* Weak aliases: each handler points to Default_Handler with Thumb bit
+   User code can override any of these with a strong definition */
 .weak NMI_Handler
-.weak HardFault_Handler
-.weak MemManage_Handler
-.weak BusFault_Handler
-.weak UsageFault_Handler
-.weak SVC_Handler
-.weak DebugMon_Handler
-.weak PendSV_Handler
-.weak SysTick_Handler
+.thumb_set NMI_Handler, Default_Handler
 
-NMI_Handler:
-HardFault_Handler:
-MemManage_Handler:
-BusFault_Handler:
-UsageFault_Handler:
-SVC_Handler:
-DebugMon_Handler:
-PendSV_Handler:
-SysTick_Handler:
-    bx lr
+.weak HardFault_Handler
+.thumb_set HardFault_Handler, Default_Handler
+
+.weak MemManage_Handler
+.thumb_set MemManage_Handler, Default_Handler
+
+.weak BusFault_Handler
+.thumb_set BusFault_Handler, Default_Handler
+
+.weak UsageFault_Handler
+.thumb_set UsageFault_Handler, Default_Handler
+
+.weak SVC_Handler
+.thumb_set SVC_Handler, Default_Handler
+
+.weak DebugMon_Handler
+.thumb_set DebugMon_Handler, Default_Handler
+
+.weak PendSV_Handler
+.thumb_set PendSV_Handler, Default_Handler
+
+.weak SysTick_Handler
+.thumb_set SysTick_Handler, Default_Handler

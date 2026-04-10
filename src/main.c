@@ -42,12 +42,12 @@ int main(void)
        SYST_RVR (0xE000E014): reload value for counter
        SYST_CVR (0xE000E018): current counter value
        SYST_CSR (0xE000E010): control and status register */
-    uint32_t *syst_rvr = (uint32_t *)0xE000E014;
-    uint32_t *syst_cvr = (uint32_t *)0xE000E018;
-    uint32_t *syst_csr = (uint32_t *)0xE000E010;
+    volatile uint32_t *syst_rvr = (volatile uint32_t *)0xE000E014;
+    volatile uint32_t *syst_cvr = (volatile uint32_t *)0xE000E018;
+    volatile uint32_t *syst_csr = (volatile uint32_t *)0xE000E010;
 
     /* Configure SysTick timer:
-       Reload value: 16000000 cycles between interrupts
+       Reload value: 8000 cycles between interrupts
        Current value: 0 (reset counter)
        Control bits: 0x00000007 = CLKSOURCE(1)|TICKINT(1)|ENABLE(1) */
     *syst_rvr = 8000;
