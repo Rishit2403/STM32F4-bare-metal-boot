@@ -50,7 +50,7 @@ int main(void)
        Reload value: 16000000 cycles between interrupts
        Current value: 0 (reset counter)
        Control bits: 0x00000007 = CLKSOURCE(1)|TICKINT(1)|ENABLE(1) */
-    *syst_rvr = 16000000;
+    *syst_rvr = 8000;
     *syst_cvr = 0;
     *syst_csr = 0x00000007;
 
@@ -58,11 +58,13 @@ int main(void)
 
     /* Main loop: SysTick_Handler increments counter asynchronously
        Output message every 1,000,000 interrupts for verification */
+    uint32_t last_print = 0;
     while (1) {
-        if (systick_count % 1000000 == 0 && systick_count > 0) {
-            sh_puts("SysTick running\r\n");
-        }
+    if (systick_count - last_print >= 5000) {
+        sh_puts("SysTick running\r\n");
+        last_print = systick_count;
     }
+}
 
     return 0;
 }
