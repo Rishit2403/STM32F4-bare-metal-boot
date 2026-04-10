@@ -7,8 +7,12 @@
    performs the requested I/O on the host, and resumes execution.
    Requires QEMU flag: -semihosting-config enable=on,target=native */
 
+/* SYS_WRITE0 operation code: prints a null-terminated string
+   R0 = 0x04 (operation), R1 = pointer to string */
 #define SEMIHOSTING_SYS_WRITE0 0x04
 
+/* Low-level semihosting call: puts opcode in R0, arg pointer in R1,
+   then executes BKPT 0xAB for QEMU to intercept and handle */
 static inline int semihosting_call(int reason, void *arg)
 {
     int value;
@@ -24,6 +28,7 @@ static inline int semihosting_call(int reason, void *arg)
     return value;
 }
 
+/* Print null-terminated string to host console via SYS_WRITE0 */
 static inline void sh_puts(const char *s)
 {
     semihosting_call(SEMIHOSTING_SYS_WRITE0, (void *)s);
