@@ -56,8 +56,9 @@ int main(void)
 
     sh_puts("SysTick enabled\r\n");
 
-    /* Main loop: SysTick_Handler increments counter asynchronously
-       Output message every 1,000,000 interrupts for verification */
+    
+   /* Main loop: SysTick_Handler increments counter asynchronously
+   Output message every 5000 interrupts for verification */ 
     uint32_t last_print = 0;
     while (1) {
     if (systick_count - last_print >= 5000) {

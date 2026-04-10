@@ -20,10 +20,11 @@ At boot the STM32 aliases Flash to address `0x00000000` so the CPU can read the 
 The sections are placed in Flash in this order:
 
 - `0x08000000` — `.isr_vector` (64 bytes): the vector table containing initial SP, Reset_Handler address, and all exception handler addresses.
-- `0x08000040` — `.text` (382 bytes): all executable code including `main()`, `SysTick_Handler()`, `Reset_Handler`, and default exception handlers. Read-only data (string literals) is also placed here.
+- `0x08000040` — `.text` (310 bytes): all executable code including `main()`, `SysTick_Handler()`, `Reset_Handler`, and default exception handlers.
+- `0x08000178` — `.rodata` (70 bytes): read-only data such as string literals used by semihosting output.
 - `0x080001BE` — `.data` initial values (4 bytes): the value `123` for the `initialized` variable, stored here in Flash and copied to SRAM by the startup code.
 
-Total Flash used: ~450 bytes.
+Total Flash used: ~448 bytes.
 
 ### SRAM layout
 
@@ -78,7 +79,7 @@ This compiles `main.c` and `startup_stm32f4.s` into object files, links them usi
 Size output from a clean build:
 ```
    text    data     bss     dec     hex filename
-    446       4       8     458     1ca firmware.elf
+    444       4       8     456     1c8 firmware.elf
 ```
 
 ---
@@ -245,6 +246,6 @@ The `.data` section runs from SRAM at 0x20000000 (VMA) but is loaded/stored in F
 
 ### Flash and SRAM usage
 
-Flash usage: .isr_vector (64 bytes) + .text (382 bytes) + .data initial values (4 bytes) = 450 bytes out of 512 KB.
+Flash usage: .isr_vector (64 bytes) + .text (310 bytes) + .rodata (70 bytes) + .data initial values (4 bytes) = 448 bytes out of 512 KB.
 
 SRAM usage: .data (4 bytes) + .bss (8 bytes) = 12 bytes out of 128 KB, plus the stack which grows downward from 0x20020000.
