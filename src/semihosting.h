@@ -1,18 +1,21 @@
 #ifndef SEMIHOSTING_H
 #define SEMIHOSTING_H
 
-/* semihosting.h — ARM semihosting interface for host I/O via QEMU
-   Uses BKPT 0xAB instruction to trap into the emulator
-   QEMU intercepts the breakpoint, reads R0 (operation) and R1 (argument),
-   performs the requested I/O on the host, and resumes execution.
-   Requires QEMU flag: -semihosting-config enable=on,target=native */
+/* Semihosting lets our bare-metal code print text to the host PC.
+   It works by executing a special breakpoint instruction (BKPT 0xAB)
+   which makes QEMU pause, check what we put in R0 and R1, do the
+   I/O for us, and then let the program continue running.
+   For this to work QEMU needs to be started with the flag
+   -semihosting-config enable=on,target=native */
 
-/* SYS_WRITE0 operation code: prints a null-terminated string
-   R0 = 0x04 (operation), R1 = pointer to string */
+/* Operation code 0x04 tells the semihosting system to print
+   a null-terminated string. We pass this in R0 and the
+   address of the string goes in R1 */
 #define SEMIHOSTING_SYS_WRITE0 0x04
 
-/* Low-level semihosting call: puts opcode in R0, arg pointer in R1,
-   then executes BKPT 0xAB for QEMU to intercept and handle */
+/* This does the actual semihosting call using inline assembly.
+   It loads the operation code into R0 and the argument into R1,
+   then hits BKPT 0xAB which QEMU catches and acts on */
 static inline int semihosting_call(int reason, void *arg)
 {
     int value;
@@ -28,7 +31,7 @@ static inline int semihosting_call(int reason, void *arg)
     return value;
 }
 
-/* Print null-terminated string to host console via SYS_WRITE0 */
+/* Wrapper to print a string - just calls semihosting with SYS_WRITE0 */
 static inline void sh_puts(const char *s)
 {
     semihosting_call(SEMIHOSTING_SYS_WRITE0, (void *)s);

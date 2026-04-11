@@ -16,11 +16,11 @@
 .section .isr_vector,"a",%progbits
 .align 8
 
-/* Interrupt vector table placed at start of Flash memory (0x08000000)
-   Entry 0: Initial stack pointer value (MSP)
-   Entry 1: Reset handler entry point with Thumb bit set
-   Entries 2-16: Exception handlers (NMI, HardFault, SVC, SysTick, etc.)
-   CPU loads SP from [0x00] and PC from [0x04] on power-up */
+/* This is the vector table - it has to be at the very start of Flash.
+   When the chip powers on it reads the first word as the stack pointer
+   and the second word as the address to start running code from.
+   After that come the exception handlers like NMI, HardFault, SysTick
+   etc. that the CPU jumps to when something happens */
 
 g_pfnVectors:
     .word _estack
@@ -43,37 +43,35 @@ g_pfnVectors:
 .section .text.Reset_Handler,"ax",%progbits
 .thumb_func
 
-/* Reset handler: entry point after CPU reset
-   Performs runtime initialization before main() execution
-   1. Copy initialized data from Flash to SRAM (.data section)
-   2. Zero-initialize uninitialized data in SRAM (.bss section)
-   3. Jump to main() function */
+/* This is the first thing that runs after the CPU resets.
+   Before we can call main() we need to set up the C environment:
+   copy .data variables from Flash into RAM so they have their
+   initial values, zero out .bss so uninitialized globals start
+   at zero, and then finally jump to main() */
 
 Reset_Handler:
-    /* Load addresses for .data copy operation
-       r0: source address (_sidata) - Flash
-       r1: destination address (_sdata) - SRAM
-       r2: end address (_edata) - SRAM */
+    /* Set up registers for the .data copy loop.
+   r0 points to where the initial values are in Flash,
+   r1 points to where they need to go in RAM,
+   r2 is the end of .data in RAM so we know when to stop */
     ldr r0, =_sidata
     ldr r1, =_sdata
     ldr r2, =_edata
 
-    /* Skip .data copy if section is empty */
+    /* If .data has nothing in it just skip straight to .bss init */
     cmp r1, r2
     beq bss_init
 
-/* Copy .data from Flash (load address) to SRAM (run address)
-   Loop: read 4 bytes from Flash, write to SRAM, increment pointers */
+/* Copy loop - grab a word from Flash, store it in RAM, move both
+   pointers forward by 4 bytes, and keep going until we reach the end */
 data_copy:
     ldr r3, [r0], #4
     str r3, [r1], #4
     cmp r1, r2
     blo data_copy
 
-/* Initialize .bss section: zero all uninitialized variables
-   r1: start address (_sbss)
-   r2: end address (_ebss)
-   r3: zero value */
+/* Now set up for zeroing .bss. r1 is the start of .bss in RAM,
+   r2 is the end, and r3 is just zero which we write over and over */
 bss_init:
     ldr r1, =_sbss
     ldr r2, =_ebss
@@ -82,13 +80,13 @@ bss_init:
     cmp r1, r2
     beq main_call
 
-/* Zero-fill loop: write 4 bytes of zeros to SRAM, increment pointer */
+/* Write zeros one word at a time until we've cleared all of .bss */
 bss_zero:
     str r3, [r1], #4
     cmp r1, r2
     blo bss_zero
 
-/* Call main() function after all initialization complete */
+/* Everything is set up now, jump to main() */
 main_call:
     bl main
     b .
@@ -96,13 +94,17 @@ main_call:
 .section .text.default_handler,"ax",%progbits
 .thumb_func
 
-/* Default handler: infinite loop catches unhandled exceptions
-   Using b . instead of bx lr so debugger can identify which fired */
+/* If an exception fires that we haven't written a handler for,
+   we just loop here forever. This makes it easy to spot in the
+   debugger because the PC will be stuck at this address */
 Default_Handler:
     b .
 
-/* Weak aliases: each handler points to Default_Handler with Thumb bit
-   User code can override any of these with a strong definition */
+/* All the exception handlers are set as weak aliases pointing to
+   Default_Handler. This means if we don't define our own version
+   (like we do for SysTick_Handler in main.c) they just fall back
+   to the default infinite loop. If we do define one, the linker
+   picks our version instead */
 .weak NMI_Handler
 .thumb_set NMI_Handler, Default_Handler
 

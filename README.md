@@ -8,40 +8,42 @@ Platform: QEMU (olimex-stm32-h405)
 
 ## Memory Map
 
-The STM32F405 has two memory regions relevant to this project:
+Our chip has two main memory areas that matter for this project:
 
-- **Flash** starts at `0x08000000`, size 512 KB. This is non-volatile storage where our code, constants, and initial values for .data live. It is read-only at runtime.
-- **SRAM** starts at `0x20000000`, size 128 KB. This is volatile read-write memory used for variables (.data and .bss sections) and the stack.
+- **Flash** at `0x08000000`, 512 KB — this is where our program lives. It keeps its contents even when power is off, but we can't write to it at runtime. All our code, string constants, and the initial values for global variables are stored here.
+- **SRAM** at `0x20000000`, 128 KB — this is working memory. Variables go here because we need to read and write them. The stack also lives here. It loses everything when you power off.
 
-At boot the STM32 aliases Flash to address `0x00000000` so the CPU can read the vector table from address zero.
+One thing to note is that the STM32 maps Flash to address `0x00000000` at boot, so when the CPU tries to read the vector table from address zero, it actually ends up reading from `0x08000000`.
 
-### Flash layout (from linker map)
+### How Flash is laid out
 
-The sections are placed in Flash in this order:
+Looking at the linker map, things are arranged in Flash like this:
 
-- `0x08000000` — `.isr_vector` (64 bytes): the vector table containing initial SP, Reset_Handler address, and all exception handler addresses.
-- `0x08000040` — `.text` (306 bytes): all executable code including `main()`, `SysTick_Handler()`, `Reset_Handler`, and default exception handlers.
-- `0x08000174` — `.rodata` (70 bytes): read-only data such as string literals used by semihosting output.
-- `0x080001BA` — `.data` initial values (4 bytes): the value `123` for the `initialized` variable, stored here in Flash and copied to SRAM by the startup code.
+- `0x08000000` — `.isr_vector` (64 bytes): our vector table with the initial SP, Reset_Handler address, and exception handler entries.
+- `0x08000040` — `.text` (306 bytes): all the actual code — `main()`, `SysTick_Handler()`, `Reset_Handler`, and the default exception handlers.
+- `0x08000174` — `.rodata` (70 bytes): read-only stuff like the string literals we pass to `sh_puts()`.
+- `0x080001BA` — `.data` initial values (4 bytes): just the number 123 for our `initialized` variable, sitting in Flash waiting to be copied to RAM.
 
-Total Flash used: ~444 bytes.
+Total Flash used comes out to about 444 bytes.
 
-### SRAM layout
+### How SRAM is laid out
 
-- `0x20000000` — `.data` (4 bytes): runtime location of `initialized`. Copied from Flash at startup.
-- `0x20000004` — `.bss` (8 bytes): contains `uninitialized` (4 bytes) and `systick_count` (4 bytes). Zeroed by startup code.
-- `0x20020000` — `_estack`: top of SRAM, initial stack pointer. Stack grows downward from here.
+- `0x20000000` — `.data` (4 bytes): where `initialized` actually lives at runtime. Gets its value copied over from Flash by the startup code.
+- `0x20000004` — `.bss` (8 bytes): holds `uninitialized` (4 bytes) and `systick_count` (4 bytes). The startup code fills all of this with zeros.
+- `0x20020000` — this is `_estack`, the very top of RAM. Our stack starts here and grows downward.
 
-Total SRAM used: 12 bytes plus stack.
+Total SRAM used is just 12 bytes for variables, plus whatever the stack needs.
 
-### Linker symbols used by startup code
+### Linker symbols the startup code uses
 
-- `_estack = 0x20020000` — initial stack pointer, top of SRAM
-- `_sidata = 0x080001BA` — where .data initial values are stored in Flash (copy source)
-- `_sdata = 0x20000000` — start of .data in SRAM (copy destination)
-- `_edata = 0x20000004` — end of .data in SRAM
-- `_sbss = 0x20000004` — start of .bss in SRAM
-- `_ebss = 0x2000000C` — end of .bss in SRAM
+These are defined in the linker script and the startup assembly references them to know where things are:
+
+- `_estack = 0x20020000` — top of RAM, used as initial stack pointer
+- `_sidata = 0x080001BA` — where the .data initial values sit in Flash (this is the copy source)
+- `_sdata = 0x20000000` — start of .data in RAM (copy destination)
+- `_edata = 0x20000004` — end of .data in RAM
+- `_sbss = 0x20000004` — start of .bss in RAM
+- `_ebss = 0x2000000C` — end of .bss in RAM
 
 ---
 
@@ -65,18 +67,18 @@ STM32F4-bare-metal-boot/
 
 ## Building
 
-On Windows, install QEMU and the ARM GNU toolchain and add both to PATH.
-On Linux: `sudo apt install qemu-system-arm gcc-arm-none-eabi gdb-multiarch make`
+On Windows you need QEMU and the ARM GNU toolchain installed and added to PATH.
+On Linux its just: `sudo apt install qemu-system-arm gcc-arm-none-eabi gdb-multiarch make`
 
-Then:
+Then to build:
 ```
 make clean
 make all
 ```
 
-This compiles `main.c` and `startup_stm32f4.s` into object files, links them using `linker.ld`, and extracts the raw binary with `objcopy`. The build produces `firmware.elf`, `firmware.bin`, and `firmware.map`.
+This compiles both source files into `.o` object files, links them together using our linker script, and then extracts the raw binary with `objcopy`. After building you'll have `firmware.elf`, `firmware.bin`, and `firmware.map`.
 
-Size output from a clean build:
+Size output from my build:
 ```
    text    data     bss     dec     hex filename
     440       4       8     452     1c4 firmware.elf
@@ -86,15 +88,15 @@ Size output from a clean build:
 
 ## QEMU Run and Debug Commands
 
-### Running
+### Running it
 
 ```
 qemu-system-arm -M olimex-stm32-h405 -kernel firmware.bin -semihosting-config enable=on,target=native -nographic
 ```
 
-Or just `make run`. Press Ctrl+A then X to exit QEMU.
+Or just `make run`. To quit QEMU press Ctrl+A then X.
 
-Expected output:
+What you should see:
 ```
 Boot OK
 Data/BSS verified
@@ -106,12 +108,14 @@ SysTick running
 
 ### Debugging with GDB
 
-Terminal 1 — start QEMU stopped, waiting for GDB:
+You need two terminals for this.
+
+Terminal 1 — start QEMU but keep the CPU paused:
 ```
 qemu-system-arm -M olimex-stm32-h405 -kernel firmware.bin -semihosting-config enable=on,target=native -S -gdb tcp::3333 -nographic
 ```
 
-Terminal 2 — connect GDB (use `gdb-multiarch` on Linux):
+Terminal 2 — connect with GDB (on Linux use `gdb-multiarch` instead):
 ```
 arm-none-eabi-gdb firmware.elf
 (gdb) target remote :3333
@@ -121,37 +125,37 @@ arm-none-eabi-gdb firmware.elf
 
 ## Boot Sequence Explanation
 
-Here is the sequence of events from power-on reset to running C code:
+Heres what happens step by step from the moment the CPU resets until our code is running:
 
-1. **CPU reset** — all registers go to defaults. The CPU prepares to read the first two words from address 0x00000000 (aliased to Flash 0x08000000).
+1. **CPU comes out of reset** — everything is at default values. The CPU is going to read the first two words from address 0x00000000 which is really Flash at 0x08000000 because of the aliasing.
 
-2. **SP loaded** — the CPU reads the 32-bit word at 0x08000000 which is `_estack = 0x20020000`. This becomes the initial Main Stack Pointer. The stack is now set up at the top of SRAM.
+2. **Stack pointer gets set up** — the CPU reads the word at 0x08000000 and gets `0x20020000` which is the top of our 128 KB RAM. It loads this into SP. Now we have a working stack.
 
-3. **PC loaded** — the CPU reads the word at 0x08000004 which is the address of `Reset_Handler` with the Thumb bit (bit 0) set. This goes into the Program Counter and execution starts.
+3. **Program counter gets loaded** — the CPU reads the next word at 0x08000004 which has the Reset_Handler address with the Thumb bit set (bit 0 = 1). It puts this in PC and starts executing from there.
 
-4. **Copy .data** — `Reset_Handler` copies initialized variable values from their storage location in Flash (`_sidata = 0x080001BA`) to their runtime location in SRAM (`_sdata` to `_edata`). After this, `initialized` contains the value 123 in RAM.
+4. **Startup code copies .data** — Reset_Handler takes the initial values stored in Flash at `0x080001BA` and copies them into RAM starting at `0x20000000`. After this our `initialized` variable actually has the value 123 in RAM where we can use it.
 
-5. **Zero .bss** — `Reset_Handler` fills the .bss region (`_sbss` to `_ebss`) with zeros. This ensures `uninitialized` and `systick_count` start at zero, as required by the C standard.
+5. **Startup code zeros .bss** — Reset_Handler fills the .bss area (from `0x20000004` to `0x2000000C`) with zeros. This is why `uninitialized` and `systick_count` start at zero like the C standard requires.
 
-6. **Call main()** — with the C runtime environment prepared, the handler executes `bl main` to jump to our application code.
+6. **Jump to main()** — the startup code does `bl main` and we're finally in C land.
 
-7. **Observable output** — `main()` calls `sh_puts("Boot OK")` which triggers a semihosting call (BKPT 0xAB). QEMU intercepts this and prints the string to the host terminal. This proves the entire boot path worked.
+7. **Print boot message** — first thing main() does is call `sh_puts("Boot OK")`. This uses semihosting (BKPT 0xAB) so QEMU prints it to our terminal. If we see this, we know the whole boot path worked.
 
-8. **Verify initialization** — `main()` checks that `initialized == 123` and `uninitialized == 0`, then prints "Data/BSS verified". This confirms both the .data copy and .bss zeroing worked correctly.
+8. **Check that init worked** — main() verifies `initialized == 123` and `uninitialized == 0`. If both are correct it prints "Data/BSS verified". This tells us the .data copy and .bss zeroing both did their job.
 
-9. **Configure SysTick** — `main()` writes to the SysTick registers at 0xE000E010-0xE000E018. It sets the reload value to 8000, clears the current value, and enables the timer with interrupt generation (CSR = 0x07).
+9. **Set up SysTick** — main() writes to the SysTick registers at 0xE000E010-0xE000E018. We set the reload value to 8000, clear the counter, and enable everything by writing 0x07 to the control register (that turns on the counter, enables interrupts, and selects the processor clock).
 
-10. **Interrupts running** — every 8000 clock cycles the SysTick counter reaches zero and fires an interrupt. The CPU looks up entry 15 in the vector table, jumps to `SysTick_Handler()` which increments `systick_count`. The main loop detects the change and prints periodic status messages.
+10. **Interrupts start firing** — from here on, every 8000 clock cycles SysTick counts down to zero and triggers an interrupt. The CPU jumps to `SysTick_Handler()` (vector table entry 15), increments `systick_count`, and returns. The main loop watches this counter and prints a message every 5000 ticks.
 
 ---
 
 ## GDB Evidence
 
-The following GDB session was captured to verify each part of the assignment.
+I ran the following GDB session to verify that everything works as expected. QEMU was started in debug mode and I connected GDB to it.
 
-### Part A — Vector table, SP, PC, and Thumb bit
+### Part A — checking the vector table, SP, PC, and Thumb bit
 
-Connecting to QEMU halted at reset:
+First I connected to QEMU which was halted right at reset:
 
 ```
 (gdb) target remote :3333
@@ -160,35 +164,34 @@ Reset_Handler () at startup/startup_stm32f4.s:39
 39          ldr r0, =_sidata
 ```
 
-Reading the first two words of the vector table in Flash:
+Then I looked at the first two entries of the vector table directly in memory:
 
 ```
 (gdb) x/2xw 0x08000000
 0x8000000:      0x20020000      0x0800012D
 ```
 
-- Entry 0 = `0x20020000` — this is the initial SP value, pointing to the top of 128 KB SRAM.
-- Entry 1 = `0x0800012D` — this is the Reset_Handler address. The last bit is `1` (0x0800012D is odd), which confirms the **Thumb bit is set**. The actual code address is 0x0800012C.
+So entry 0 is `0x20020000` which is our initial SP (top of RAM). Entry 1 is `0x0800012D` — thats the Reset_Handler address and since its an odd number (ends in D) the Thumb bit is definitely set.
 
-Checking that SP was loaded correctly from the vector table:
+Next I checked that the CPU actually loaded SP from the vector table:
 
 ```
 (gdb) info registers sp
 sp             0x20020000          0x20020000
 ```
 
-SP = `0x20020000`, matches vector table entry 0. **SP is initialized from the vector table.**
+Yep, SP is `0x20020000` — exactly what was in vector table entry 0.
 
-Checking that PC jumped to Reset_Handler:
+And PC should be at Reset_Handler:
 
 ```
 (gdb) info registers pc
 pc             0x800012c           0x800012c <Reset_Handler>
 ```
 
-PC = `0x0800012C` which is `Reset_Handler`. **PC jumps to Reset_Handler** as expected.
+PC is at `0x0800012C` which is Reset_Handler. Makes sense since `0x0800012D` minus the Thumb bit gives `0x0800012C`.
 
-Examining the full vector table to verify all exception handlers have Thumb bit set:
+I also dumped the entire vector table to make sure all exception handler entries have the Thumb bit set:
 
 ```
 (gdb) x/16xw 0x08000000
@@ -198,11 +201,11 @@ Examining the full vector table to verify all exception handlers have Thumb bit 
 0x8000030:      0x08000171      0x00000000      0x08000171      0x0800007d
 ```
 
-Every non-reserved handler address ends in an odd digit (bit 0 = 1), confirming all entries have the Thumb bit set. Entry 15 (`0x0800007D`) is our SysTick_Handler from main.c.
+All the handler addresses end in odd digits (0x0800012d, 0x08000171, 0x0800007d) so they all have bit 0 set. The zeros are just reserved entries. Entry 15 at the end is `0x0800007D` which is our SysTick_Handler from main.c.
 
-### Part B — Runtime initialization (.data and .bss)
+### Part B — checking .data copy and .bss zeroing
 
-Setting a breakpoint at main and continuing past Reset_Handler:
+I set a breakpoint at main and let it run through the startup code:
 
 ```
 (gdb) break main
@@ -215,7 +218,7 @@ Breakpoint 1, main () at src/main.c:31
 31          sh_puts("Boot OK\r\n");
 ```
 
-By the time we hit main, Reset_Handler has already copied .data and zeroed .bss. Checking the test variables:
+Now Reset_Handler has already done its thing. Lets see if the variables are correct:
 
 ```
 (gdb) print initialized
@@ -225,10 +228,9 @@ $1 = 123
 $2 = 0
 ```
 
-**`initialized == 123`** — the .data section was correctly copied from Flash to SRAM.
-**`uninitialized == 0`** — the .bss section was correctly zeroed.
+`initialized` is 123 so the .data copy from Flash to RAM worked. `uninitialized` is 0 so the .bss zeroing worked too.
 
-Verifying these variables live in SRAM (not Flash) to confirm the copy actually happened:
+To really prove the copy happened I checked the addresses of these variables:
 
 ```
 (gdb) print &initialized
@@ -238,11 +240,11 @@ $3 = (int *) 0x20000000
 $4 = (int *) 0x20000004
 ```
 
-Both addresses are in SRAM (`0x2000xxxx`), not Flash (`0x0800xxxx`). The .data copy moved the value 123 from its Flash storage at `0x080001BA` to its runtime location at `0x20000000`.
+Both are in SRAM (0x2000xxxx range), not in Flash. So `initialized` really was copied from its Flash location at `0x080001BA` to RAM at `0x20000000`. If the startup code hadn't run, this value wouldn't be here.
 
-### Part D — Observable output
+### Part D — semihosting output
 
-After continuing past the breakpoint, the semihosting output appears on the QEMU console:
+After continuing from the breakpoint, these messages showed up on the QEMU terminal:
 
 ```
 Boot OK
@@ -250,11 +252,11 @@ Data/BSS verified
 SysTick enabled
 ```
 
-This confirms main() was reached and semihosting is working.
+This proves we reached main() and semihosting is working properly.
 
-### Part E — SysTick interrupt verification
+### Part E — SysTick is actually running
 
-After letting the program run for a few seconds and interrupting:
+I let the program run for a few seconds then hit Ctrl+C to pause it:
 
 ```
 (gdb) continue
@@ -269,24 +271,24 @@ $5 = 48352
 $6 = (volatile uint32_t *) 0x20000008
 ```
 
-`systick_count` is non-zero (48352), proving the SysTick interrupt handler has been firing repeatedly and incrementing the volatile counter. The variable is at `0x20000008` in .bss (SRAM).
+`systick_count` is 48352 which is definitely not zero, so the SysTick interrupt has been firing and the handler has been incrementing the counter. The variable is at `0x20000008` which is in .bss in SRAM.
 
-Checking the SysTick control register to confirm it is enabled:
+I also read the SysTick control register directly to confirm it's configured right:
 
 ```
 (gdb) x/xw 0xE000E010
 0xe000e010:     0x00010007
 ```
 
-Bits [2:0] = `0x7` = CLKSOURCE | TICKINT | ENABLE, all set. Bit 16 (COUNTFLAG) is also set, indicating the counter has counted down to zero at least once. SysTick is running and generating interrupts.
+The bottom 3 bits are all 1 (0x7) which means CLKSOURCE, TICKINT, and ENABLE are all on. Bit 16 is also set — thats the COUNTFLAG which means the counter has counted down to zero at least once. So SysTick is running and generating interrupts as expected.
 
 ---
 
 ## Map File Analysis
 
-The generated `firmware.map` file shows how the linker placed everything. Here are the key parts:
+The `firmware.map` file gets generated during linking. Here are the important parts from it:
 
-### Vector table placement
+### Where the vector table ended up
 
 ```
 .isr_vector     0x08000000       0x40
@@ -294,9 +296,9 @@ The generated `firmware.map` file shows how the linker placed everything. Here a
                 0x08000000                g_pfnVectors
 ```
 
-The vector table is at the very start of Flash (0x08000000), exactly where the Cortex-M expects it. It is 0x40 = 64 bytes, covering 16 entries (SP + 15 exception vectors).
+Its right at `0x08000000` which is the start of Flash — exactly where the Cortex-M CPU expects to find it. The 0x40 = 64 bytes covers all 16 entries (initial SP + 15 exception vectors).
 
-### .data load address vs run address
+### The .data section has two addresses
 
 ```
 .data           0x20000000        0x4 load address 0x080001ba
@@ -306,10 +308,10 @@ The vector table is at the very start of Flash (0x08000000), exactly where the C
                 0x20000004                        _edata = .
 ```
 
-The `.data` section runs from SRAM at 0x20000000 (VMA) but is loaded/stored in Flash at 0x080001BA (LMA). The variable `initialized` is the only thing in .data (4 bytes). The startup code copies from the LMA to the VMA before main() runs.
+This is the interesting part. The .data section shows up at `0x20000000` in RAM (thats where the code uses it from) but it also says "load address 0x080001ba" — thats where the actual bytes are stored in the binary in Flash. The startup code bridges this gap by copying from `0x080001BA` to `0x20000000` before main() runs.
 
-### Flash and SRAM usage
+### How much memory we actually used
 
-Flash usage: .isr_vector (64 bytes) + .text (306 bytes) + .rodata (70 bytes) + .data initial values (4 bytes) = 444 bytes out of 512 KB.
+Flash: .isr_vector (64 bytes) + .text (306 bytes) + .rodata (70 bytes) + .data initial values (4 bytes) = 444 bytes out of 512 KB. We're barely using any of it.
 
-SRAM usage: .data (4 bytes) + .bss (8 bytes) = 12 bytes out of 128 KB, plus the stack which grows downward from 0x20020000.
+SRAM: .data (4 bytes) + .bss (8 bytes) = 12 bytes out of 128 KB, plus the stack growing down from the top. Again barely anything.
