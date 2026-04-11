@@ -10,8 +10,8 @@ Platform: QEMU (olimex-stm32-h405)
 
 Our chip has two main memory areas that matter for this project:
 
-- **Flash** at `0x08000000`, 512 KB — this is where our program lives. It keeps its contents even when power is off, but we can't write to it at runtime. All our code, string constants, and the initial values for global variables are stored here.
-- **SRAM** at `0x20000000`, 128 KB — this is working memory. Variables go here because we need to read and write them. The stack also lives here. It loses everything when you power off.
+- Flash at `0x08000000`, 512 KB — this is where our program lives. It keeps its contents even when power is off, but we can't write to it at runtime. All our code, string constants, and the initial values for global variables are stored here.
+-  SRAM  at `0x20000000`, 128 KB — this is working memory. Variables go here because we need to read and write them. The stack also lives here. It loses everything when you power off.
 
 One thing to note is that the STM32 maps Flash to address `0x00000000` at boot, so when the CPU tries to read the vector table from address zero, it actually ends up reading from `0x08000000`.
 
@@ -127,25 +127,25 @@ arm-none-eabi-gdb firmware.elf
 
 Heres what happens step by step from the moment the CPU resets until our code is running:
 
-1. **CPU comes out of reset** — everything is at default values. The CPU is going to read the first two words from address 0x00000000 which is really Flash at 0x08000000 because of the aliasing.
+1.  CPU comes out of reset  — everything is at default values. The CPU is going to read the first two words from address 0x00000000 which is really Flash at 0x08000000 because of the aliasing.
 
-2. **Stack pointer gets set up** — the CPU reads the word at 0x08000000 and gets `0x20020000` which is the top of our 128 KB RAM. It loads this into SP. Now we have a working stack.
+2.  Stack pointer gets set up  — the CPU reads the word at 0x08000000 and gets `0x20020000` which is the top of our 128 KB RAM. It loads this into SP. Now we have a working stack.
 
-3. **Program counter gets loaded** — the CPU reads the next word at 0x08000004 which has the Reset_Handler address with the Thumb bit set (bit 0 = 1). It puts this in PC and starts executing from there.
+3.  Program counter gets loaded  — the CPU reads the next word at 0x08000004 which has the Reset_Handler address with the Thumb bit set (bit 0 = 1). It puts this in PC and starts executing from there.
 
-4. **Startup code copies .data** — Reset_Handler takes the initial values stored in Flash at `0x080001BA` and copies them into RAM starting at `0x20000000`. After this our `initialized` variable actually has the value 123 in RAM where we can use it.
+4.  Startup code copies .data  — Reset_Handler takes the initial values stored in Flash at `0x080001BA` and copies them into RAM starting at `0x20000000`. After this our `initialized` variable actually has the value 123 in RAM where we can use it.
 
-5. **Startup code zeros .bss** — Reset_Handler fills the .bss area (from `0x20000004` to `0x2000000C`) with zeros. This is why `uninitialized` and `systick_count` start at zero like the C standard requires.
+5.  Startup code zeros .bss  — Reset_Handler fills the .bss area (from `0x20000004` to `0x2000000C`) with zeros. This is why `uninitialized` and `systick_count` start at zero like the C standard requires.
 
-6. **Jump to main()** — the startup code does `bl main` and we're finally in C land.
+6.  Jump to main()  — the startup code does `bl main` and we're finally in C land.
 
-7. **Print boot message** — first thing main() does is call `sh_puts("Boot OK")`. This uses semihosting (BKPT 0xAB) so QEMU prints it to our terminal. If we see this, we know the whole boot path worked.
+7.  Print boot message  — first thing main() does is call `sh_puts("Boot OK")`. This uses semihosting (BKPT 0xAB) so QEMU prints it to our terminal. If we see this, we know the whole boot path worked.
 
-8. **Check that init worked** — main() verifies `initialized == 123` and `uninitialized == 0`. If both are correct it prints "Data/BSS verified". This tells us the .data copy and .bss zeroing both did their job.
+8.  Check that init worked  — main() verifies `initialized == 123` and `uninitialized == 0`. If both are correct it prints "Data/BSS verified". This tells us the .data copy and .bss zeroing both did their job.
 
-9. **Set up SysTick** — main() writes to the SysTick registers at 0xE000E010-0xE000E018. We set the reload value to 8000, clear the counter, and enable everything by writing 0x07 to the control register (that turns on the counter, enables interrupts, and selects the processor clock).
+9.  Set up SysTick  — main() writes to the SysTick registers at 0xE000E010-0xE000E018. We set the reload value to 8000, clear the counter, and enable everything by writing 0x07 to the control register (that turns on the counter, enables interrupts, and selects the processor clock).
 
-10. **Interrupts start firing** — from here on, every 8000 clock cycles SysTick counts down to zero and triggers an interrupt. The CPU jumps to `SysTick_Handler()` (vector table entry 15), increments `systick_count`, and returns. The main loop watches this counter and prints a message every 5000 ticks.
+10.  Interrupts start firing  — from here on, every 8000 clock cycles SysTick counts down to zero and triggers an interrupt. The CPU jumps to `SysTick_Handler()` (vector table entry 15), increments `systick_count`, and returns. The main loop watches this counter and prints a message every 5000 ticks.
 
 ---
 
